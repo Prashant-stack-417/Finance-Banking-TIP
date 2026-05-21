@@ -12,6 +12,7 @@ MONGO_COLLECTION_LOGS = "enforcement_logs"
 # API Keys (set in .env file)
 VIRUSTOTAL_API_KEY = os.getenv("VIRUSTOTAL_API_KEY", "")
 OTX_API_KEY = os.getenv("OTX_API_KEY", "")
+VIRUSTOTAL_TIMEOUT = int(os.getenv("VIRUSTOTAL_TIMEOUT", 30))
 
 # Elasticsearch / ELK
 ES_HOST = os.getenv("ES_HOST", "http://localhost:9200")
