@@ -69,6 +69,11 @@ def run_daily_summary():
 
 def start_enforcer_daemon():
     """Start the policy enforcer in a background thread."""
+    import sys
+    if not sys.platform.startswith("linux"):
+        logger.warning("Policy Enforcer requires Linux (iptables). Skipping enforcer on this platform.")
+        return None
+
     from enforcer.policy_enforcer import run as enforcer_run
     t = threading.Thread(target=enforcer_run, daemon=True, name="PolicyEnforcer")
     t.start()
