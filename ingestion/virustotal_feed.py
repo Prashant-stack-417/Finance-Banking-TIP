@@ -4,7 +4,9 @@ Queries VirusTotal for known malicious IPs and domains.
 """
 import requests
 import time
+from requests.adapters import HTTPAdapter
 from loguru import logger
+from urllib3.util.retry import Retry
 import config
 from database import upsert_indicator
 from ingestion.normalizer import normalize_indicator
@@ -12,15 +14,37 @@ from ingestion.normalizer import normalize_indicator
 
 VT_BASE = "https://www.virustotal.com/api/v3"
 HEADERS = {"x-apikey": config.VIRUSTOTAL_API_KEY}
+VT_TIMEOUT = getattr(config, "VIRUSTOTAL_TIMEOUT", 30)
 
 # Free API: 4 requests/minute
 REQUEST_DELAY = 16  # seconds between requests on free tier
 
 
+def _build_session() -> requests.Session:
+    """Create a session with retry/backoff for transient VirusTotal failures."""
+    session = requests.Session()
+    retry = Retry(
+        total=3,
+        connect=3,
+        read=3,
+        backoff_factor=1,
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=frozenset({"GET"}),
+        raise_on_status=False,
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
+
+
+SESSION = _build_session()
+
+
 def query_ip(ip: str) -> dict | None:
     """Get VirusTotal analysis for an IP."""
     try:
-        resp = requests.get(f"{VT_BASE}/ip_addresses/{ip}", headers=HEADERS, timeout=15)
+        resp = SESSION.get(f"{VT_BASE}/ip_addresses/{ip}", headers=HEADERS, timeout=VT_TIMEOUT)
         if resp.status_code == 200:
             return resp.json().get("data", {}).get("attributes", {})
         elif resp.status_code == 404:
@@ -36,7 +60,7 @@ def query_ip(ip: str) -> dict | None:
 def query_domain(domain: str) -> dict | None:
     """Get VirusTotal analysis for a domain."""
     try:
-        resp = requests.get(f"{VT_BASE}/domains/{domain}", headers=HEADERS, timeout=15)
+        resp = SESSION.get(f"{VT_BASE}/domains/{domain}", headers=HEADERS, timeout=VT_TIMEOUT)
         if resp.status_code == 200:
             return resp.json().get("data", {}).get("attributes", {})
         return None

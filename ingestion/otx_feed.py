@@ -3,8 +3,10 @@ AlienVault OTX OSINT Feed Ingester
 Pulls malicious IPs and domains from OTX pulses.
 """
 import requests
+from requests.adapters import HTTPAdapter
 from loguru import logger
 from datetime import datetime, timedelta
+from urllib3.util.retry import Retry
 import config
 from database import upsert_indicator
 from ingestion.normalizer import normalize_indicator
@@ -12,6 +14,25 @@ from ingestion.normalizer import normalize_indicator
 
 OTX_BASE = "https://otx.alienvault.com/api/v1"
 HEADERS = {"X-OTX-API-KEY": config.OTX_API_KEY}
+OTX_TIMEOUT = getattr(config, "OTX_TIMEOUT", 30)
+
+
+def _build_session() -> requests.Session:
+    """Create a session with retry/backoff for transient OTX failures."""
+    session = requests.Session()
+    retry = Retry(
+        total=3,
+        connect=3,
+        read=3,
+        backoff_factor=1,
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=frozenset({"GET"}),
+        raise_on_status=False,
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
 
 
 def fetch_subscribed_pulses(days_back: int = 7) -> list:
@@ -19,13 +40,17 @@ def fetch_subscribed_pulses(days_back: int = 7) -> list:
     since = (datetime.utcnow() - timedelta(days=days_back)).strftime("%Y-%m-%dT%H:%M:%S")
     pulses = []
     url = f"{OTX_BASE}/pulses/subscribed?modified_since={since}&limit=50"
+    session = _build_session()
     while url:
         try:
-            resp = requests.get(url, headers=HEADERS, timeout=15)
+            resp = session.get(url, headers=HEADERS, timeout=OTX_TIMEOUT)
             resp.raise_for_status()
             data = resp.json()
             pulses.extend(data.get("results", []))
             url = data.get("next")
+        except requests.exceptions.Timeout:
+            logger.error(f"OTX fetch timeout after {OTX_TIMEOUT}s: {url}")
+            break
         except Exception as e:
             logger.error(f"OTX fetch error: {e}")
             break
