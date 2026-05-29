@@ -30,4 +30,31 @@ def _run(cmd: list, check: bool = True) -> subprocess.CompletedProcess:
         logger.error("iptables not found. Are you running as root on Linux?")
         raise
 
+def ensure_tip_chain():
+    """
+    Create the TIP_BLOCK custom chain and hook it into INPUT/FORWARD if not present.
+    Using a dedicated chain keeps TIP rules isolated and easy to flush.
+    """
 
+    chain = config.IPTABLES_CHAIN
+
+    # Check if chain exists
+    result = _run(["iptables", "-L", chain, "-n"], check=False)
+
+    if result.returncode != 0:
+        _run(["iptables", "-N", chain])
+        logger.info(f"Created iptables chain: {chain}")
+
+    # Hook chain into INPUT if not already
+    check_input = _run(["iptables", "-C", "INPUT", "-j", chain], check=False)
+
+    if check_input.returncode != 0:
+        _run(["iptables", "-I", "INPUT", "1", "-j", chain])
+        logger.info(f"Hooked {chain} into INPUT chain")
+
+    # Hook into FORWARD
+    check_fwd = _run(["iptables", "-C", "FORWARD", "-j", chain], check=False)
+
+    if check_fwd.returncode != 0:
+        _run(["iptables", "-I", "FORWARD", "1", "-j", chain])
+        logger.info(f"Hooked {chain} into FORWARD chain")
