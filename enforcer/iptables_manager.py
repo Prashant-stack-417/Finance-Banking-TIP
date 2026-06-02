@@ -168,3 +168,29 @@ def unblock_domain_via_dns(domain: str, rule_id: str) -> bool:
         logger.error(f"Error unblocking domain {domain}: {e}")
 
         return False
+
+def list_tip_rules() -> list:
+    """Return current TIP_BLOCK chain rules as a list of strings."""
+
+    if shutil.which("iptables") is None:
+        return []
+
+    result = _run(
+        ["iptables", "-L", config.IPTABLES_CHAIN, "-n", "--line-numbers"],
+        check=False
+    )
+
+    if result.returncode == 0:
+        return result.stdout.strip().splitlines()
+
+    return []
+
+def flush_all_tip_rules():
+    """
+    Emergency flush — removes ALL rules from the TIP chain.
+    Use only in emergencies or during testing.
+    """
+
+    _run(["iptables", "-F", config.IPTABLES_CHAIN], check=False)
+
+    logger.warning("FLUSHED all TIP_BLOCK chain rules")
