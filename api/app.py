@@ -6,12 +6,14 @@ Provides endpoints for the SOC dashboard:
   GET  /api/logs             — enforcement logs
   POST /api/rollback         — rollback a false positive
   GET  /api/stats            — summary stats
+  GET  /api/high-risk-ips    — high-risk IPs with advanced filtering
+  GET  /api/high-risk-stats  — statistics about high-risk IPs
   GET  /api/rules            — current iptables TIP rules
 """
 from flask import Flask, jsonify, request, abort
 from flask_cors import CORS
 from loguru import logger
-from datetime import datetime
+from datetime import datetime, timedelta
 import config
 from database import (
     get_indicators_collection,
@@ -151,6 +153,103 @@ def stats():
     r["by_source"] = {d["_id"]: d["count"] for d in source_counts}
 
     return jsonify(r)
+
+
+@app.route("/api/high-risk-ips", methods=["GET"])
+def high_risk_ips():
+    """
+    Get high-risk IPs with advanced filtering.
+    
+    Query params:
+      filter=all|unblocked|blocked|critical  (default: unblocked)
+      source=URLhaus|AlienVault OTX|VirusTotal
+      tag=malware|botnet|ransomware|phishing|exploit|apt|trojan
+      recent_hours=N        (IPs discovered in last N hours)
+      threshold=0-100       (custom risk score threshold)
+      limit=1-500           (default: 100)
+    """
+    col = get_indicators_collection()
+    threshold = int(request.args.get("threshold", config.RISK_SCORE_HIGH))
+    query = {
+        "type": "ip",
+        "risk_score": {"$gte": threshold}
+    }
+    
+    # Filter type
+    filter_type = request.args.get("filter", "unblocked")
+    if filter_type == "blocked":
+        query["blocked"] = True
+    elif filter_type == "critical":
+        query["risk_score"] = {"$gte": 90}
+        query["blocked"] = False
+    elif filter_type == "unblocked":
+        query["blocked"] = False
+    # "all" means no blocked filter
+    
+    # Source filter
+    if request.args.get("source"):
+        query["source"] = request.args["source"]
+    
+    # Tag filter
+    if request.args.get("tag"):
+        query["tags"] = request.args["tag"].lower()
+    
+    # Recent hours filter
+    if request.args.get("recent_hours"):
+        hours = int(request.args["recent_hours"])
+        since = datetime.utcnow() - timedelta(hours=hours)
+        query["first_seen"] = {"$gte": since}
+    
+    limit = min(int(request.args.get("limit", 100)), 500)
+    docs = list(col.find(query, {"_id": 0}).sort("risk_score", -1).limit(limit))
+    
+    return jsonify({
+        "count": len(docs),
+        "threshold": threshold,
+        "filter": filter_type,
+        "ips": [serialize(d) for d in docs]
+    })
+
+
+@app.route("/api/high-risk-stats", methods=["GET"])
+def high_risk_stats():
+    """Get statistics specifically about high-risk IPs."""
+    col = get_indicators_collection()
+    threshold = int(request.args.get("threshold", config.RISK_SCORE_HIGH))
+    
+    query = {"type": "ip", "risk_score": {"$gte": threshold}}
+    
+    total = col.count_documents(query)
+    blocked = col.count_documents({**query, "blocked": True})
+    unblocked = col.count_documents({**query, "blocked": False})
+    
+    # Critical IPs (score >= 90)
+    critical = col.count_documents({"type": "ip", "risk_score": {"$gte": 90}, "blocked": False})
+    
+    # By source
+    source_breakdown = list(col.aggregate([
+        {"$match": query},
+        {"$group": {"_id": "$source", "count": {"$sum": 1}}}
+    ]))
+    
+    # Top tags
+    tag_breakdown = list(col.aggregate([
+        {"$match": query},
+        {"$unwind": "$tags"},
+        {"$group": {"_id": "$tags", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 10}
+    ]))
+    
+    return jsonify({
+        "total_high_risk": total,
+        "blocked": blocked,
+        "unblocked": unblocked,
+        "critical_unblocked": critical,
+        "threshold": threshold,
+        "by_source": {d["_id"]: d["count"] for d in source_breakdown},
+        "top_tags": {d["_id"]: d["count"] for d in tag_breakdown},
+    })
 
 
 @app.route("/api/rules", methods=["GET"])
