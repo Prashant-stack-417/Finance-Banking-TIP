@@ -66,6 +66,7 @@ This starts:
 - SIEM sync to Elasticsearch — runs every 30 min
 - Policy Enforcer daemon — polls MongoDB every 60s, auto-blocks high-risk IPs
 - REST API on http://localhost:5000
+- Browser dashboard on http://localhost:5000/ and http://localhost:5000/ui
 
 ---
 
@@ -79,6 +80,8 @@ This starts:
 | GET | /api/stats | Summary stats (totals, by type, by source) |
 | GET | /api/rules | Current iptables TIP_BLOCK chain rules |
 | POST | /api/rollback | Rollback a false positive |
+
+Open http://localhost:5000/ in a browser to use the dashboard, or request the same route with `Accept: application/json` to keep the original JSON landing response.
 
 ### Rollback example (false positive)
 ```bash

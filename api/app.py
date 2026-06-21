@@ -1,16 +1,16 @@
 """
 TIP REST API
 Provides endpoints for the SOC dashboard:
-  GET  /api/indicators       — list indicators with filters
-  GET  /api/indicators/<val> — single indicator detail
-  GET  /api/logs             — enforcement logs
-  POST /api/rollback         — rollback a false positive
-  GET  /api/stats            — summary stats
-  GET  /api/high-risk-ips    — high-risk IPs with advanced filtering
-  GET  /api/high-risk-stats  — statistics about high-risk IPs
-  GET  /api/rules            — current iptables TIP rules
+    GET  /api/indicators       — list indicators with filters
+    GET  /api/indicators/<val> — single indicator detail
+    GET  /api/logs             — enforcement logs
+    POST /api/rollback         — rollback a false positive
+    GET  /api/stats            — summary stats
+    GET  /api/high-risk-ips    — high-risk IPs with advanced filtering
+    GET  /api/high-risk-stats  — statistics about high-risk IPs
+    GET  /api/rules            — current iptables TIP rules
 """
-from flask import Flask, jsonify, request, abort
+from flask import Flask, jsonify, request, abort, render_template
 from flask_cors import CORS
 from loguru import logger
 from datetime import datetime, timedelta
@@ -29,12 +29,31 @@ CORS(app)
 
 @app.route("/", methods=["GET"])
 def home():
-    """Basic health and landing endpoint for the web app root."""
+    """Serve the dashboard to browsers while preserving JSON for API clients."""
+    wants_html = request.accept_mimetypes.accept_html and not request.accept_mimetypes.accept_json
+    if wants_html:
+        return render_template("dashboard.html")
+
     return jsonify({
         "status": "ok",
         "service": "Threat Intelligence Platform",
-        "endpoints": ["/api/indicators", "/api/logs", "/api/stats", "/api/rules"],
+        "dashboard": "/",
+        "endpoints": [
+            "/api/indicators",
+            "/api/logs",
+            "/api/stats",
+            "/api/high-risk-ips",
+            "/api/high-risk-stats",
+            "/api/rules",
+            "/api/rollback",
+        ],
     })
+
+
+@app.route("/ui", methods=["GET"])
+def dashboard():
+    """Explicit UI route for the browser dashboard."""
+    return render_template("dashboard.html")
 
 
 def serialize(doc: dict) -> dict:

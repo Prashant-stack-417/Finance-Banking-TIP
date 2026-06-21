@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Threat Intelligence Platform</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+</head>
+<body>
+  <div class="backdrop backdrop-a"></div>
+  <div class="backdrop backdrop-b"></div>
+
+  <main class="shell">
+    <header class="hero panel">
+      <div>
+        <p class="eyebrow">Threat Intelligence Platform</p>
+        <h1>SOC endpoint dashboard</h1>
+        <p class="lede">Inspect indicators, review enforcement logs, check high-risk IPs, and roll back false positives from one browser view.</p>
+      </div>
+      <div class="hero-meta">
+        <div class="status-pill" id="connectionStatus">Loading API status</div>
+        <a class="ghost-link" href="/api/stats" target="_blank" rel="noreferrer">Open raw JSON</a>
+      </div>
+    </header>
+
+    <section class="stats-grid" aria-label="Summary stats">
+      <article class="stat-card panel">
+        <span class="stat-label">Total indicators</span>
+        <strong id="totalIndicators">-</strong>
+      </article>
+      <article class="stat-card panel">
+        <span class="stat-label">Blocked indicators</span>
+        <strong id="blockedIndicators">-</strong>
+      </article>
+      <article class="stat-card panel">
+        <span class="stat-label">High-risk indicators</span>
+        <strong id="highRiskIndicators">-</strong>
+      </article>
+      <article class="stat-card panel">
+        <span class="stat-label">High-risk IPs</span>
+        <strong id="highRiskIps">-</strong>
+      </article>
+    </section>
+
+    <section class="controls-grid">
+      <article class="panel control-card">
+        <div class="card-head">
+          <h2>Indicators</h2>
+          <span>/api/indicators</span>
+        </div>
+        <div class="form-grid">
+          <label>
+            Type
+            <select id="indicatorType">
+              <option value="">All</option>
+              <option value="ip">ip</option>
+              <option value="domain">domain</option>
+              <option value="url">url</option>
+              <option value="hash">hash</option>
+            </select>
+          </label>
+          <label>
+            Blocked
+            <select id="indicatorBlocked">
+              <option value="">Any</option>
+              <option value="true">Blocked</option>
+              <option value="false">Unblocked</option>
+            </select>
+          </label>
+          <label>
+            Min score
+            <input id="indicatorMinScore" type="number" min="0" max="100" placeholder="70">
+          </label>
+          <label>
+            Source
+            <input id="indicatorSource" type="text" placeholder="URLhaus">
+          </label>
+          <label>
+            Limit
+            <input id="indicatorLimit" type="number" min="1" max="500" value="25">
+          </label>
+        </div>
+        <button class="primary" data-action="indicators">Load indicators</button>
+      </article>
+
+      <article class="panel control-card">
+        <div class="card-head">
+          <h2>High-risk IPs</h2>
+          <span>/api/high-risk-ips</span>
+        </div>
+        <div class="form-grid">
+          <label>
+            Filter
+            <select id="highRiskFilter">
+              <option value="unblocked">Unblocked</option>
+              <option value="all">All</option>
+              <option value="blocked">Blocked</option>
+              <option value="critical">Critical</option>
+            </select>
+          </label>
+          <label>
+            Source
+            <input id="highRiskSource" type="text" placeholder="VirusTotal">
+          </label>
+          <label>
+            Tag
+            <input id="highRiskTag" type="text" placeholder="malware">
+          </label>
+          <label>
+            Recent hours
+            <input id="highRiskRecentHours" type="number" min="1" placeholder="24">
+          </label>
+          <label>
+            Threshold
+            <input id="highRiskThreshold" type="number" min="0" max="100" value="70">
+          </label>
+          <label>
+            Limit
+            <input id="highRiskLimit" type="number" min="1" max="500" value="25">
+          </label>
+        </div>
+        <button class="primary" data-action="high-risk">Load high-risk IPs</button>
+      </article>
+
+      <article class="panel control-card">
+        <div class="card-head">
+          <h2>Lookup and rollback</h2>
+          <span>/api/indicators/&lt;value&gt; and /api/rollback</span>
+        </div>
+        <div class="form-grid single-column">
+          <label>
+            Indicator value
+            <input id="lookupValue" type="text" placeholder="1.2.3.4">
+          </label>
+          <button class="secondary" data-action="lookup">Lookup indicator</button>
+          <label>
+            Analyst
+            <input id="rollbackAnalyst" type="text" value="SOC">
+          </label>
+          <label>
+            Rule ID
+            <input id="rollbackRuleId" type="text" placeholder="abc12345">
+          </label>
+          <label>
+            Type
+            <input id="rollbackType" type="text" placeholder="ip">
+          </label>
+          <button class="danger" data-action="rollback">Rollback false positive</button>
+        </div>
+      </article>
+
+      <article class="panel control-card">
+        <div class="card-head">
+          <h2>Logs and rules</h2>
+          <span>/api/logs and /api/rules</span>
+        </div>
+        <div class="form-grid">
+          <label>
+            Log action
+            <input id="logAction" type="text" placeholder="BLOCK">
+          </label>
+          <label>
+            Log limit
+            <input id="logLimit" type="number" min="1" max="1000" value="25">
+          </label>
+        </div>
+        <div class="button-row">
+          <button class="secondary" data-action="logs">Load logs</button>
+          <button class="secondary" data-action="rules">Load rules</button>
+        </div>
+      </article>
+    </section>
+
+    <section class="output-grid">
+      <article class="panel output-card">
+        <div class="card-head">
+          <h2 id="resultTitle">Results</h2>
+          <span id="resultMeta">Awaiting request</span>
+        </div>
+        <div id="resultStatus" class="result-status">Use one of the endpoint controls above to fetch data.</div>
+        <div id="resultContent" class="result-content"></div>
+      </article>
+
+      <article class="panel output-card">
+        <div class="card-head">
+          <h2>API notes</h2>
+          <span>Built from the current backend</span>
+        </div>
+        <ul class="notes">
+          <li>Browser requests land on this dashboard, while API clients still receive JSON from the root route.</li>
+          <li>The dashboard talks directly to the existing Flask endpoints; no extra backend service is required.</li>
+          <li>Rollback requires <code>value</code>, <code>type</code>, and <code>rule_id</code>.</li>
+        </ul>
+      </article>
+    </section>
+  </main>
+
+  <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+</body>
+</html>
